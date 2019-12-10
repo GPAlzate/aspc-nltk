@@ -5,7 +5,9 @@ A sentiment analyzer for ASPC course reviews
 from vader_sentiment.vader_sentiment import SentimentIntensityAnalyzer
 import string
 import math
+import random
 import re
+import time
 analyser = SentimentIntensityAnalyzer()
 
 def sentiment_analyzer_scores(sentence):
@@ -28,28 +30,33 @@ def analyze_file(inFile, outFile, startIndex):
     # read header
     csv_file.readline()
     count = 0
+    sentiments = {}
 
+    start = time.time()
     for review in csv_file:
 
-        review = review.split("\t")
+        review = review.split(",")
         class_id = review[0]
         comment = review[1]
         rating = int(review[5])
         # if they wrote a comment and gave a course review
         if comment != "n/a" and rating != "-1":
+            comment = comment.split()
+            random.shuffle(comment)
+            comment = " ".join(comment)
             sentiment_score = sentiment_analyzer_scores(comment)
+            
             max = -1
             prediction = -1
             label = -1
-            for polarity in sentiment_score:
-                if sentiment_score[polarity] > max:
-                    max = sentiment_score[polarity]
-                    if polarity == "neg":
-                        prediction = -1
-                    elif polarity == "neu":
-                        prediction = 0
-                    else:
-                        prediction = 1
+            compound = sentiment_score["compound"]
+
+            if compound >= 0.05:
+                prediction = 1
+            elif compound >= -0.05:
+                prediction = 0
+            else:
+                prediction = -1
 
             if rating < 3:
                 label = -1
@@ -63,6 +70,8 @@ def analyze_file(inFile, outFile, startIndex):
             # out_file.write(str(startIndex) + ", " + class_id + ", " + str(sentiment_score) + ", " + str(rating) )
 
             startIndex += 1
+    end = time.time()
+    print("finished in" + str(end - start))
     print(count / startIndex)
     out_file.close()
     print("Finished analyzing. Wrote to file")
@@ -88,11 +97,15 @@ def preProcessFile(inFile, outFile):
         comment = review[1].lower()
 
         rating = int(review[5])
+        count = 0
         # label = 0
         #
         # # if they wrote a comment and gave a course review
         if comment != "n/a" and rating != "-1":
             comment = addSpace(comment)
+
+
+
             if rating < 3:
                 label = -1
             elif rating == 3:
@@ -100,7 +113,9 @@ def preProcessFile(inFile, outFile):
             else:
                 label = 1
 
-            out_file.write(str(label) + "\t" + comment + "\n")
+
+
+            out_file.write(str(rating) + "\t" + comment + "\n")
             # out_file.write(", " + class_id + ", " + str(sentiment_score) + ", " + str(rating))
 
     out_file.close()
@@ -113,8 +128,8 @@ def addSpace(words):
 
 
 def main():
-    analyze_file("course_reviews2.csv", "analyzedFile.txt", 1)
-    # preProcessFile("course_reviews2.csv", "preprocessed.txt")
+     analyze_file("course_reviews.csv", "analyzedFile.txt", 1)
+     # preProcessFile("course_reviews2.csv", "preprocessed.txt")
 if __name__ == '__main__':
     main()
     # sample = "(Effort you put in) x100 = What you get out of it don't be afraid of her ; don't be afraid of seeming stupid, she knows the material a heck ton better than you do ; go talk to her after class ; do the work!"
