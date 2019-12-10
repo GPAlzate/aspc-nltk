@@ -30,7 +30,7 @@ def analyze_file(inFile, outFile, startIndex):
     # read header
     csv_file.readline()
     count = 0
-    sentiments = {}
+    word_with_sentiment = {}
 
     start = time.time()
     for review in csv_file:
@@ -42,10 +42,16 @@ def analyze_file(inFile, outFile, startIndex):
         # if they wrote a comment and gave a course review
         if comment != "n/a" and rating != "-1":
             comment = comment.split()
-            random.shuffle(comment)
+            for word in comment:
+                word_with_sentiment[word] = sentiment_analyzer_scores(word)["compound"]
+            # uncomment to shuffle
+            # comment = comment.split()
+            # random.shuffle(comment)
             comment = " ".join(comment)
             sentiment_score = sentiment_analyzer_scores(comment)
-            
+
+
+
             max = -1
             prediction = -1
             label = -1
@@ -71,10 +77,13 @@ def analyze_file(inFile, outFile, startIndex):
 
             startIndex += 1
     end = time.time()
-    print("finished in" + str(end - start))
+    print("finished in " + str(end - start))
+    print({k: v for k, v in sorted(word_with_sentiment.items(), key=lambda item: item[1])})
     print(count / startIndex)
     out_file.close()
     print("Finished analyzing. Wrote to file")
+
+
 
 def preProcessFile(inFile, outFile):
     """
