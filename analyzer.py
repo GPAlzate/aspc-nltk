@@ -83,7 +83,32 @@ def analyze_file(inFile, outFile, startIndex):
     out_file.close()
     print("Finished analyzing. Wrote to file")
 
-
+def tricky_sentence():
+    tricky_sentences = ["Its a love hate relationship",
+                        "The class is fucking cool",
+                        "this kung fu class is cool",
+                        "Must-take class! Professor is VERY insightful about war and violence",
+                        "Sentiment analysis has never been good.",
+                        "Sentiment analysis has never been this good!",
+                        "Most automated sentiment analysis tools are shit.",
+                        "With VADER, sentiment analysis is the shit!",
+                        "Other sentiment analysis tools can be quite bad.",
+                        "On the other hand, VADER is quite bad ass",
+                        "VADER is such a badass!",  # slang with punctuation emphasis
+                        "Without a doubt, excellent idea.",
+                        "Roger Dodger is one of the most compelling variations on this theme.",
+                        "Roger Dodger is at least compelling as a variation on the theme.",
+                        "Roger Dodger is one of the least compelling variations on this theme.",
+                        "Not such a badass after all.",  # Capitalized negation with slang
+                        "Without a doubt, an excellent idea."  # "without {any} doubt" as negation
+                        ]
+    print("----------------------------------------------------")
+    print(" - Analyze examples of tricky sentences that cause trouble to other sentiment analysis tools.")
+    print("  -- special case idioms - e.g., 'never good' vs 'never this good', or 'bad' vs 'bad ass'.")
+    print("  -- special uses of 'least' as negation versus comparison \n")
+    for sentence in tricky_sentences:
+        vs = sentiment_analyzer_scores(sentence)
+        print(sentence, vs)
 
 def preProcessFile(inFile, outFile):
     """
@@ -137,8 +162,9 @@ def addSpace(words):
 
 
 def main():
-     analyze_file("course_reviews.csv", "analyzedFile.txt", 1)
+    # analyze_file("course_reviews.csv", "analyzedFile.txt", 1)
      # preProcessFile("course_reviews2.csv", "preprocessed.txt")
+     tricky_sentence()
 if __name__ == '__main__':
     main()
     # sample = "(Effort you put in) x100 = What you get out of it don't be afraid of her ; don't be afraid of seeming stupid, she knows the material a heck ton better than you do ; go talk to her after class ; do the work!"
