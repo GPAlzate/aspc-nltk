@@ -172,17 +172,17 @@ public class NBClassifier implements Classifier {
 //		System.out.println(j + "\t" + (double) count / (double) testData.getData().size());
 //		
 //	}
-		
-		// Time test
-		ArrayList<Example> dataArray = data.getData();
-		long start = System.currentTimeMillis();
-		for (int i = 0; i < dataArray.size(); i++) {
-			Example example = dataArray.get(i);
-			nb.classify(example);
-		}
-		long end = System.currentTimeMillis();
-		
-		System.out.println("Time taken: " + (end - start));
+//		
+//		// Time test
+//		ArrayList<Example> dataArray = data.getData();
+//		long start = System.currentTimeMillis();
+//		for (int i = 0; i < dataArray.size(); i++) {
+//			Example example = dataArray.get(i);
+//			nb.classify(example);
+//		}
+//		long end = System.currentTimeMillis();
+//		
+//		System.out.println("Time taken: " + (end - start));
 		
 		// Get positiveness/negativeness/neutralness of each word
 		HashMap<Integer, String> fmap = trainData.getFeatureMap();
@@ -224,12 +224,20 @@ public class NBClassifier implements Classifier {
 		}
 
 		// Replace counts with probabilities of each word
+		// TODO: make a new hashmap to avoid concurrent modification exception
 		for (HashMap<String, Double> hashMap : hashMaps) {
+			
 			for (String s : hashMap.keySet()) {
+				String str = new String(s);
 				double count = hashMap.get(s);
 				double denom = totalWordCountMap.get(s);
-
-				hashMap.put(s, count / denom);
+				
+				// Only incl if count is greater than 5
+				if (count > 5) {
+					hashMap.put(s, count / denom);
+				} else {
+					hashMap.put(s, null);
+				}
 			}
 		}
 
@@ -247,9 +255,10 @@ public class NBClassifier implements Classifier {
 				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue,
 						LinkedHashMap::new));
 
-//		for (String s : sortedPositives.keySet()) {
-//			System.out.println(s + "\t" + sortedPositives.get(s));
-//		}
+		for (String s : sortedPositives.keySet()) {
+			System.out.println(s + "\t" + sortedPositives.get(s));
+			
+		}
 //		for (String s : sortedNegatives.keySet()) {
 //			System.out.println(s + "\t" + sortedNegatives.get(s));
 //		}
