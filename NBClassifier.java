@@ -1,5 +1,8 @@
 package ml.classifiers;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,6 +28,8 @@ public class NBClassifier implements Classifier {
 	private HashMapCounter<String> hmap;
 	private double prediction;
 	private boolean pos = false;
+
+	private static HashMap<String, Double> totalWordCountMap;
 
 	public NBClassifier() {
 	}
@@ -141,56 +146,42 @@ public class NBClassifier implements Classifier {
 		return featureProb;
 	}
 
-	public static void main(String[] args) {
+	/**
+	 * 
+	 * @param nb
+	 * @param testData
+	 */
+	private static void lambdaTest(NBClassifier nb, DataSet testData) {
+		System.out.println("lambda testing");
+		for (double j = 0.00; j < 0.03; j += 0.005) {
+			nb.setLambda(j);
+			int count = 0;
+			for (int i = 0; i < testData.getData().size(); i++) {
+				Example example = testData.getData().get(i);
+				double pred = nb.classify(example);
+				if (pred == example.getLabel()) {
+					count++;
+				}
+			}
+			System.out.println(j + "\t" + (double) count / (double) testData.getData().size());
+		}
+	}
 
-		DataSet data = new DataSet("code/preprocessed2.txt", DataSet.TEXTFILE);
-		NBClassifier nb = new NBClassifier();
-		DataSetSplit cvs = data.split(.8);
+	private static void timingTest(NBClassifier nb, DataSet data) {
+		System.out.println("Timing for classification of entire set");
+		ArrayList<Example> dataArray = data.getData();
+		long start = System.currentTimeMillis();
+		for (int i = 0; i < dataArray.size(); i++) {
+			Example example = dataArray.get(i);
+			nb.classify(example);
+		}
+		long end = System.currentTimeMillis();
+		System.out.println("Time taken: " + (end - start));
+	}
 
-		DataSetSplit dataSplit = cvs;
-		DataSet trainData = cvs.getTrain();
-		DataSet testData = cvs.getTest();
-		nb.setUseOnlyPositiveFeatures(true);
-		nb.setLambda(0.02);
-
-		System.out.println("training");
-
-		nb.train(trainData);
-
-		System.out.println("done training");
-
-//		for (double j = 0.00; j < 0.03; j += 0.005) {
-//			nb.setLambda(j);
-//			int count = 0;
-//		for (int i = 0; i < testData.getData().size(); i++) {
-//			Example example = testData.getData().get(i);
-//			double pred = nb.classify(example);
-//			if (pred == example.getLabel()) {
-//				count++;
-//			}
-//		}
-//		System.out.println(j + "\t" + (double) count / (double) testData.getData().size());
-//		
-//	}
-//		
-//		// Time test
-//		ArrayList<Example> dataArray = data.getData();
-//		long start = System.currentTimeMillis();
-//		for (int i = 0; i < dataArray.size(); i++) {
-//			Example example = dataArray.get(i);
-//			nb.classify(example);
-//		}
-//		long end = System.currentTimeMillis();
-//		
-//		System.out.println("Time taken: " + (end - start));
-		
-		// Get positiveness/negativeness/neutralness of each word
-		HashMap<Integer, String> fmap = trainData.getFeatureMap();
-
-		HashMap<String, Double> positives = new HashMap<String, Double>();
-		HashMap<String, Double> negatives = new HashMap<String, Double>();
-		HashMap<String, Double> neutrals = new HashMap<String, Double>();
-
+	private static void fillWordToCountMaps(NBClassifier nb, HashMap<Integer, String> fmap,
+			HashMap<String, Double> positives, HashMap<String, Double> negatives, HashMap<String, Double> neutrals) {
+		// For each label (pos, neutral, neg) we fill a new hashmap, word->count
 		for (String s : nb.hmap.keySet()) {
 			String[] ss = s.split(",");
 			String word = fmap.get(Integer.parseInt(ss[0]));
@@ -203,68 +194,116 @@ public class NBClassifier implements Classifier {
 				neutrals.put(word, (double) nb.hmap.get(s));
 			}
 		}
+	}
 
-		HashMap<String, Double> totalWordCountMap = new HashMap<String, Double>();
+	private static void fillTotalWordCountMap(ArrayList<HashMap<String, Double>> hashMaps,
+			HashMap<String, Double> positives, HashMap<String, Double> negatives, HashMap<String, Double> neutrals) {
+		// For each label hashmap
+		for (HashMap<String, Double> hashMap : hashMaps) {
+			// For each word
+			for (String s : hashMap.keySet()) {
+				// Put a count for that word if we haven't already
+				if (totalWordCountMap.get(s) == null) {
+					// 0 if null
+					Double posCount = (positives.get(s) != null) ? positives.get(s) : 0;
+					Double negCount = (negatives.get(s) != null) ? negatives.get(s) : 0;
+					Double neutCount = (neutrals.get(s) != null) ? neutrals.get(s) : 0;
+					totalWordCountMap.put(s, posCount + negCount + neutCount);
+				}
+			}
+		}
+	}
+
+	private static HashMap<String, Double> replaceCountsWithProbabilities(HashMap<String, Double> hashMap, int cutoff) {
+		HashMap<String, Double> probMap = new HashMap<String, Double>();
+		for (String s : hashMap.keySet()) {
+			double count = hashMap.get(s);
+			double denom = totalWordCountMap.get(s);
+			// Only incl if count is greater than/equal to cutoff
+			if (count >= cutoff) {
+				probMap.put(s, count / denom);
+			}
+		}
+		return probMap;
+	}
+
+	private static LinkedHashMap<String, Double> sortMapByValues(HashMap<String, Double> hashMap) {
+		return hashMap.entrySet().stream().sorted(Map.Entry.comparingByValue()).collect(Collectors
+				.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue, LinkedHashMap::new));
+	}
+
+	private static void makeWordRankingFile(HashMap<String, Double> sorted, int cutoff, String label) {
+		try {
+			PrintWriter writer = new PrintWriter(new File(label + ".txt"));
+			writer.println("Most" + label + "words, where count(word)>=" + cutoff);
+			for (String s : sorted.keySet()) {
+				writer.println(s + "\t" + sorted.get(s));
+			}
+			writer.close();
+		} catch (FileNotFoundException e1) {
+			e1.printStackTrace();
+		}
+	}
+
+	public static void main(String[] args) {
+
+		DataSet data = new DataSet("code/preprocessed2.txt", DataSet.TEXTFILE);
+
+		NBClassifier nb = new NBClassifier();
+		DataSetSplit dss = data.split(.8);
+		DataSet trainData = dss.getTrain();
+		DataSet testData = dss.getTest();
+		nb.setUseOnlyPositiveFeatures(true);
+
+//		System.out.println("training");
+//		nb.train(trainData);
+//		System.out.println("done training");
+//
+//		// Find optimal lambda
+//		lambdaTest(nb, testData);
+//
+//		nb.setLambda(0.02);
+//
+//		// Timing for classification of entire set
+//		timingTest(nb, data);
+
+		// train on entire dataset
+		System.out.println("training on entire dataset");
+		nb.train(data);
+
+		// Get positiveness/negativeness/neutralness of each word
+		// For each label (pos, neutral, neg) we fill a new hashmap, word->count
+		HashMap<Integer, String> fmap = trainData.getFeatureMap();
+		HashMap<String, Double> positives = new HashMap<String, Double>();
+		HashMap<String, Double> negatives = new HashMap<String, Double>();
+		HashMap<String, Double> neutrals = new HashMap<String, Double>();
+		fillWordToCountMaps(nb, fmap, positives, negatives, neutrals);
+
+		// Also get a hashmap of the total count of each word across all labels
+		totalWordCountMap = new HashMap<String, Double>();
 
 		// Get hashmap of totals so we can normalize scores
 		ArrayList<HashMap<String, Double>> hashMaps = new ArrayList<HashMap<String, Double>>();
 		hashMaps.add(positives);
 		hashMaps.add(negatives);
 		hashMaps.add(neutrals);
-		for (HashMap<String, Double> hashMap : hashMaps) {
-			for (String s : hashMap.keySet()) {
-				// 0 if null
-				Double posCount = (positives.get(s) != null) ? positives.get(s) : 0;
-				Double negCount = (negatives.get(s) != null) ? negatives.get(s) : 0;
-				Double neutCount = (neutrals.get(s) != null) ? neutrals.get(s) : 0;
-
-				if (totalWordCountMap.get(s) == null)
-					totalWordCountMap.put(s, posCount + negCount + neutCount);
-			}
-		}
+		fillTotalWordCountMap(hashMaps, positives, negatives, neutrals);
 
 		// Replace counts with probabilities of each word
-		// TODO: make a new hashmap to avoid concurrent modification exception
-		for (HashMap<String, Double> hashMap : hashMaps) {
-			
-			for (String s : hashMap.keySet()) {
-				String str = new String(s);
-				double count = hashMap.get(s);
-				double denom = totalWordCountMap.get(s);
-				
-				// Only incl if count is greater than 5
-				if (count > 5) {
-					hashMap.put(s, count / denom);
-				} else {
-					hashMap.put(s, null);
-				}
-			}
-		}
+		int cutoff = 10; // min number of instances of the word
+		HashMap<String, Double> positiveProbs = replaceCountsWithProbabilities(positives, cutoff);
+		HashMap<String, Double> negativeProbs = replaceCountsWithProbabilities(negatives, cutoff);
+		HashMap<String, Double> neutralProbs = replaceCountsWithProbabilities(neutrals, cutoff);
 
-		nb.train(data);
-
-		LinkedHashMap<String, Double> sortedPositives = positives.entrySet().stream()
-				.sorted(Map.Entry.comparingByValue()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-						(oldValue, newValue) -> oldValue, LinkedHashMap::new));
-
-		LinkedHashMap<String, Double> sortedNegatives = negatives.entrySet().stream()
-				.sorted(Map.Entry.comparingByValue()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-						(oldValue, newValue) -> oldValue, LinkedHashMap::new));
-
-		LinkedHashMap<String, Double> sortedNeutrals = neutrals.entrySet().stream().sorted(Map.Entry.comparingByValue())
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue,
-						LinkedHashMap::new));
-
-		for (String s : sortedPositives.keySet()) {
-			System.out.println(s + "\t" + sortedPositives.get(s));
-			
-		}
-//		for (String s : sortedNegatives.keySet()) {
-//			System.out.println(s + "\t" + sortedNegatives.get(s));
-//		}
-//		for (String s : sortedNeutrals.keySet()) {
-//			System.out.println(s + "\t" + sortedNeutrals.get(s));
-//		}
+		// Sort by value
+		LinkedHashMap<String, Double> sortedPositives = sortMapByValues(positiveProbs);
+		LinkedHashMap<String, Double> sortedNegatives = sortMapByValues(negativeProbs);
+		LinkedHashMap<String, Double> sortedNeutrals = sortMapByValues(neutralProbs);
+		
+		// Write the rankings of each word for each label into the corresponding file
+		makeWordRankingFile(sortedPositives, cutoff, "positive");
+		makeWordRankingFile(sortedNegatives, cutoff, "negative");
+		makeWordRankingFile(sortedNeutrals, cutoff, "neutral");
 
 		// Tricky sentences with negation and idiomatic phrases
 		String[] trickySentences = { "its a love hate relationship", "the class is fucking cool",
@@ -289,7 +328,7 @@ public class NBClassifier implements Classifier {
 			}
 			Example e = new Example();
 			for (String w : wordMap.keySet()) {
-//				System.out.println(w + ": " + wordToFeatureIndex.get(w));
+				// System.out.println(w + ": " + wordToFeatureIndex.get(w));
 				e.addFeature(wordToFeatureIndex.get(w), wordMap.get(w));
 			}
 
@@ -297,41 +336,5 @@ public class NBClassifier implements Classifier {
 
 			System.out.println(pred + "\t" + sentence);
 		}
-
-//		ArrayList<Double[]> arr = new ArrayList<Double[]>();
-//		for (int j = 0; j < testData.getData().size(); j++) {
-//			Example example = testData.getData().get(j);
-//			double pred = nb.classify(example);
-//
-//			double confidence = nb.confidence(example);
-//			if (pred != example.getLabel()) {
-//				Double[] newarr = new Double[2];
-//				newarr[0] = 0.0;
-//				newarr[1] = confidence;
-//				arr.add(newarr);
-//			} else {
-//				count += 1;
-//				Double[] newarr = new Double[2];
-//				newarr[0] = 1.0;
-//				newarr[1] = confidence;
-//				arr.add(newarr);
-//			}
-//			System.out.println(count / (double) testData.getData().size());
-//
-//		}
-//		Comparator<Double[]> byconf = (Double[] o1, Double[] o2) -> o2[1].compareTo(o1[1]);
-//		Collections.sort(arr, byconf);
-//		String accuracies = "";
-//		int correct = 0;
-//
-//		for (int j = 0; j < arr.size(); j++) {
-//			double conf = arr.get(j)[1];
-//			correct += arr.get(j)[0];
-//
-//			double acc = (double) correct / (double) j;
-//			System.out.println(conf + "," + acc);
-//		}
-
 	}
-
 }
